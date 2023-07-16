@@ -1,21 +1,64 @@
 const router = require('express').Router();
 const passport = require('passport');
-const passwordUtils = require('../lib/passwordUtils');
+const genPassword = require('../lib/passwordUtils').genPassword;
 const connection = require('../config/database');
+const { isAuth, isAdmin } = require('./authMiddleware');
 const User = connection.models.User;
 
 /**
  * -------------- POST ROUTES ----------------
  */
 
- // TODO
- router.post('/login', (req, res, next) => {});
+// router.post('/login', passport.authenticate('local', {successRedirect: "/login-success", failureRedirect: '/login-failure' }))
+router.post('/login', (req, res, next) => {
+    passport.authenticate('local', (err, user, info) => {
+        if (err) {
+            // Handle error
+            return next(err);
+        }
+        
+        if (!user) {
+            // Handle authentication failure
+            console.log(user)
+            return res.redirect('/login-failure');
+        }
+        
+        // Authentication success
+        req.logIn(user, (err) => {
+            if (err) {
+                return next(err);
+            }
+            
+            return res.redirect('/login-success');
+        });
+    })(req, res, next);
+});
 
- // TODO
- router.post('/register', (req, res, next) => {});
 
 
- /**
+router.post('/register', (req, res, next) => {
+    const saltHash = genPassword(req.body.password)
+    
+    const salt = saltHash.salt
+    const hash = saltHash.hash
+
+    const newUser = new User({
+        username: req.body.username,
+        hash: hash,
+        salt: salt,
+        admin: false
+    })
+
+    newUser.save()
+        .then((user) => {
+            console.log(user)
+        })
+    console.log(newUser.username)
+    res.redirect('/login')
+})
+
+
+/**
  * -------------- GET ROUTES ----------------
  */
 
@@ -25,7 +68,7 @@ router.get('/', (req, res, next) => {
 
 // When you visit http://localhost:3000/login, you will see "Login Page"
 router.get('/login', (req, res, next) => {
-   
+
     const form = '<h1>Login Page</h1><form method="POST" action="/login">\
     Enter Username:<br><input type="text" name="username">\
     <br>Enter Password:<br><input type="password" name="password">\
@@ -53,14 +96,14 @@ router.get('/register', (req, res, next) => {
  * 
  * Also, look up what behaviour express session has without a maxage set
  */
-router.get('/protected-route', (req, res, next) => {
+router.get('/protected-route', isAuth, (req, res, next) => {
     
-    // This is how you check if a user is authenticated and protect a route.  You could turn this into a custom middleware to make it less redundant
-    if (req.isAuthenticated()) {
-        res.send('<h1>You are authenticated</h1><p><a href="/logout">Logout and reload</a></p>');
-    } else {
-        res.send('<h1>You are not authenticated</h1><p><a href="/login">Login</a></p>');
-    }
+    res.send("You made it to the route")
+});
+
+router.get('/admin-route', isAdmin, (req, res, next) => {
+    
+    res.send("You made it to the route")
 });
 
 // Visiting this route logs the user out
